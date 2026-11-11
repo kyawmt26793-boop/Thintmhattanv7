@@ -1,0 +1,80 @@
+name: Build Offline Capacitor APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Auto-Fix Folder Structure
+        run: |
+          mkdir -p src public
+          [ -f "App.jsx" ] && mv App.jsx src/App.jsx || true
+          [ -f "main.jsx" ] && mv main.jsx src/main.jsx || true
+          [ -f "index.css" ] && mv index.css src/index.css || true
+          [ -f "icon.svg" ] && cp icon.svg public/icon.svg || true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Install NPM Dependencies & Sharp Icon Engine
+        run: npm install --no-audit --no-fund sharp
+
+      - name: Build React Web App
+        run: npm run build
+
+      - name: Setup Capacitor & Android Platform
+        run: |
+          if [ ! -f "capacitor.config.json" ] && [ ! -f "capacitor.config.ts" ]; then
+            npx cap init "သင့်မှတ်တမ်း" "com.mytracker.liquidglass" --web-dir dist
+          fi
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Generate Android Launcher Icons (Zero apt-get)
+        run: |
+          node -e '
+            const sharp = require("sharp");
+            const fs = require("fs");
+            const src = fs.existsSync("icon.png") ? "icon.png" : (fs.existsSync("public/icon.png") ? "public/icon.png" : "public/icon.svg");
+            if (fs.existsSync(src)) {
+              const sizes = { "mipmap-mdpi": 48, "mipmap-hdpi": 72, "mipmap-xhdpi": 96, "mipmap-xxhdpi": 144, "mipmap-xxxhdpi": 192 };
+              Promise.all(Object.entries(sizes).map(async ([dir, sz]) => {
+                const p = "android/app/src/main/res/" + dir;
+                fs.mkdirSync(p, { recursive: true });
+                await sharp(src).resize(sz, sz).png().toFile(p + "/ic_launcher.png");
+                await sharp(src).resize(sz, sz).png().toFile(p + "/ic_launcher_round.png");
+                await sharp(src).resize(sz, sz).png().toFile(p + "/ic_launcher_foreground.png");
+              })).then(() => console.log("Android icons generated successfully!"));
+            }
+          '
+
+      - name: Build Debug APK with Gradle
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Liquid-Glass-Tracker-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
