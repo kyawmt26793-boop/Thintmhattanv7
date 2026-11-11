@@ -1,0 +1,59 @@
+name: Deploy Offline PWA to GitHub Pages
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Auto-Fix Folder Structure if Uploaded Flat from Mobile
+        run: |
+          mkdir -p src public
+          [ -f "App.jsx" ] && mv App.jsx src/App.jsx || true
+          [ -f "main.jsx" ] && mv main.jsx src/main.jsx || true
+          [ -f "index.css" ] && mv index.css src/index.css || true
+          [ -f "icon.svg" ] && cp icon.svg public/icon.svg || true
+          [ -f "manifest.json" ] && mv manifest.json public/manifest.json || true
+          [ -f "sw.js" ] && mv sw.js public/sw.js || true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies & Build App
+        run: |
+          npm install
+          npm run build
+          cp dist/index.html dist/404.html
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload PWA Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        
