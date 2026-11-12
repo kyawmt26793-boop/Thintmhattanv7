@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+.ios-safe-top {
+  padding-top: max(18px, env(safe-area-inset-top));
+}
+
+.ios-safe-bottom {
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+}
